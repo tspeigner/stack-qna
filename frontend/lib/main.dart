@@ -32,6 +32,8 @@ class QnAScreen extends StatefulWidget {
 
 class _QnAScreenState extends State<QnAScreen> {
   final TextEditingController _controller = TextEditingController();
+  final TextEditingController _tagsController = TextEditingController();
+  final ScrollController _scrollController = ScrollController(); // Add this
   String _selectedSource = 'hf';
   bool _loading = false;
   String? _error;
@@ -41,6 +43,7 @@ class _QnAScreenState extends State<QnAScreen> {
   String? _llmAnswer;
   String? _llmSourceUrl;
   bool _llmLoading = false;
+  double _minScore = 0;
 
   Future<void> _askQuestion() async {
     setState(() {
@@ -50,12 +53,22 @@ class _QnAScreenState extends State<QnAScreen> {
       _selectedSourceIndex = null;
     });
     try {
+      List<String>? tags;
+      if (_tagsController.text.trim().isNotEmpty) {
+        tags = _tagsController.text
+            .split(',')
+            .map((t) => t.trim())
+            .where((t) => t.isNotEmpty)
+            .toList();
+      }
       final response = await http.post(
-        Uri.parse('http://127.0.0.1:8000/ask'),
+        Uri.parse('http://127.0.0.1:8001/ask'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
           'question': _controller.text,
           'source': _selectedSource,
+          if (tags != null && tags.isNotEmpty) 'tags': tags,
+          if (_minScore > 0) 'min_score': _minScore.toInt(),
         }),
       );
       if (response.statusCode == 200) {
@@ -159,6 +172,14 @@ class _QnAScreenState extends State<QnAScreen> {
   }
 
   @override
+  void dispose() {
+    _controller.dispose();
+    _tagsController.dispose();
+    _scrollController.dispose(); // Dispose the controller
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
@@ -170,6 +191,7 @@ class _QnAScreenState extends State<QnAScreen> {
             onPressed: () {
               setState(() {
                 _controller.clear();
+                _tagsController.clear();
                 _selectedSource = 'hf';
                 _loading = false;
                 _error = null;
@@ -178,6 +200,7 @@ class _QnAScreenState extends State<QnAScreen> {
                 _llmAnswer = null;
                 _llmSourceUrl = null;
                 _llmLoading = false;
+                _minScore = 0;
               });
             },
           ),
@@ -186,8 +209,10 @@ class _QnAScreenState extends State<QnAScreen> {
       body: Padding(
         padding: const EdgeInsets.all(16),
         child: Scrollbar(
+          controller: _scrollController,
           thumbVisibility: true,
           child: SingleChildScrollView(
+            controller: _scrollController,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -230,6 +255,39 @@ class _QnAScreenState extends State<QnAScreen> {
                               child: CircularProgressIndicator(strokeWidth: 2),
                             )
                           : const Text('Ask'),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: _tagsController,
+                        decoration: const InputDecoration(
+                          labelText: 'Tags (comma separated)',
+                          border: OutlineInputBorder(),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    SizedBox(
+                      width: 120,
+                      child: Row(
+                        children: [
+                          const Text('Min Score:'),
+                          Expanded(
+                            child: Slider(
+                              value: _minScore,
+                              min: 0,
+                              max: 100,
+                              divisions: 20,
+                              label: _minScore.round().toString(),
+                              onChanged: (v) => setState(() => _minScore = v),
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ],
                 ),

@@ -1,12 +1,18 @@
 flask
-chromadb
-dotenv
-httpx
+chromadb>=1.0.13
+python-dotenv>=0.13
+httpx>=0.27.0
 pytest
 pandas
 pyarrow
 datasets  # Hugging Face Datasets library for loading and filtering SO data
-
+orjson>=3.9.12
+uvicorn
+fastapi
+pydantic
+protobuf<5.0.0
+requests>=2.32.2
+tqdm>=4.66.3
 # For Gemini Pro/OpenAI embeddings, add the relevant SDKs if needed:
 # google-generativeai
 # openai

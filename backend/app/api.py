@@ -2,6 +2,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from app.db import get_qa_collection
 from app.gemini import generate_gemini_answer
+from chromadb import Client
 
 class AskRequest(BaseModel):
     question: str
