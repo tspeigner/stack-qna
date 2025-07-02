@@ -1,0 +1,17 @@
+[
+  {"question": "How do I create a virtual environment in Python?", "answer": "You can create a virtual environment using 'python -m venv myenv'."},
+  {"question": "What is a Python list comprehension?", "answer": "A list comprehension is a concise way to create lists: [x for x in range(5)]."},
+  {"question": "How do I install packages with pip?", "answer": "Use 'pip install package_name' to install packages from PyPI."},
+  {"question": "How do I define a function in Python?", "answer": "Use the 'def' keyword: def my_function(): pass"},
+  {"question": "How do I use a for loop in Python?", "answer": "Example: for i in range(5): print(i)"},
+  {"question": "What is Terraform used for?", "answer": "Terraform is an open-source IaC tool for provisioning and managing cloud infrastructure."},
+  {"question": "How do I initialize a Terraform project?", "answer": "Run 'terraform init' in your project directory to initialize Terraform."},
+  {"question": "How do I apply Terraform changes?", "answer": "Use 'terraform apply' to apply the planned changes to your infrastructure."},
+  {"question": "What is a Terraform provider?", "answer": "A provider is a plugin that Terraform uses to interact with APIs of cloud providers and services."},
+  {"question": "How do I destroy resources in Terraform?", "answer": "Run 'terraform destroy' to remove all resources defined in your configuration."},
+  {"question": "What is Kubernetes?", "answer": "Kubernetes is an open-source platform for automating deployment, scaling, and management of containerized applications."},
+  {"question": "How do I create a deployment in Kubernetes?", "answer": "Use 'kubectl create deployment' or apply a YAML manifest with 'kubectl apply -f deployment.yaml'."},
+  {"question": "What is a Kubernetes pod?", "answer": "A pod is the smallest deployable unit in Kubernetes, representing a single instance of a running process."},
+  {"question": "How do I expose a Kubernetes deployment?", "answer": "Use 'kubectl expose deployment' to create a service that exposes your deployment."},
+  {"question": "How do I check the status of pods in Kubernetes?", "answer": "Run 'kubectl get pods' to list all pods and their status."}
+]

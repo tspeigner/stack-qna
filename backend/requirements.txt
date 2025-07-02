@@ -1,0 +1,12 @@
+flask
+chromadb
+dotenv
+httpx
+pytest
+pandas
+pyarrow
+datasets  # Hugging Face Datasets library for loading and filtering SO data
+
+# For Gemini Pro/OpenAI embeddings, add the relevant SDKs if needed:
+# google-generativeai
+# openai
