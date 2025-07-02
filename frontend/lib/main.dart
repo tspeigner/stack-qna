@@ -1,122 +1,402 @@
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
+import 'package:url_launcher/url_launcher.dart';
 
 void main() {
-  runApp(const MyApp());
+  runApp(const StackQnaApp());
 }
 
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+class StackQnaApp extends StatelessWidget {
+  const StackQnaApp({super.key});
 
-  // This widget is the root of your application.
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Flutter Demo',
+      title: 'Stack Overflow RAG Q&A',
       theme: ThemeData(
-        // This is the theme of your application.
-        //
-        // TRY THIS: Try running your application with "flutter run". You'll see
-        // the application has a purple toolbar. Then, without quitting the app,
-        // try changing the seedColor in the colorScheme below to Colors.green
-        // and then invoke "hot reload" (save your changes or press the "hot
-        // reload" button in a Flutter-supported IDE, or press "r" if you used
-        // the command line to start the app).
-        //
-        // Notice that the counter didn't reset back to zero; the application
-        // state is not lost during the reload. To reset the state, use hot
-        // restart instead.
-        //
-        // This works for code too, not just values: Most code changes can be
-        // tested with just a hot reload.
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
+        useMaterial3: true,
       ),
-      home: const MyHomePage(title: 'Flutter Demo Home Page'),
+      home: const QnAScreen(),
     );
   }
 }
 
-class MyHomePage extends StatefulWidget {
-  const MyHomePage({super.key, required this.title});
-
-  // This widget is the home page of your application. It is stateful, meaning
-  // that it has a State object (defined below) that contains fields that affect
-  // how it looks.
-
-  // This class is the configuration for the state. It holds the values (in this
-  // case the title) provided by the parent (in this case the App widget) and
-  // used by the build method of the State. Fields in a Widget subclass are
-  // always marked "final".
-
-  final String title;
+class QnAScreen extends StatefulWidget {
+  const QnAScreen({super.key});
 
   @override
-  State<MyHomePage> createState() => _MyHomePageState();
+  State<QnAScreen> createState() => _QnAScreenState();
 }
 
-class _MyHomePageState extends State<MyHomePage> {
-  int _counter = 0;
+class _QnAScreenState extends State<QnAScreen> {
+  final TextEditingController _controller = TextEditingController();
+  String _selectedSource = 'hf';
+  bool _loading = false;
+  String? _error;
+  Map<String, dynamic>? _result;
+  int? _selectedSourceIndex; // Track selected row
 
-  void _incrementCounter() {
+  String? _llmAnswer;
+  String? _llmSourceUrl;
+  bool _llmLoading = false;
+
+  Future<void> _askQuestion() async {
     setState(() {
-      // This call to setState tells the Flutter framework that something has
-      // changed in this State, which causes it to rerun the build method below
-      // so that the display can reflect the updated values. If we changed
-      // _counter without calling setState(), then the build method would not be
-      // called again, and so nothing would appear to happen.
-      _counter++;
+      _loading = true;
+      _error = null;
+      _result = null;
+      _selectedSourceIndex = null;
     });
+    try {
+      final response = await http.post(
+        Uri.parse('http://127.0.0.1:8000/ask'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'question': _controller.text,
+          'source': _selectedSource,
+        }),
+      );
+      if (response.statusCode == 200) {
+        setState(() {
+          _result = jsonDecode(response.body);
+        });
+      } else {
+        setState(() {
+          _error = 'Error: ${response.statusCode} ${response.reasonPhrase}';
+        });
+      }
+    } catch (e) {
+      setState(() {
+        _error = 'Error: $e';
+      });
+    } finally {
+      setState(() {
+        _loading = false;
+      });
+    }
   }
 
-  @override
-  Widget build(BuildContext context) {
-    // This method is rerun every time setState is called, for instance as done
-    // by the _incrementCounter method above.
-    //
-    // The Flutter framework has been optimized to make rerunning build methods
-    // fast, so that you can just rebuild anything that needs updating rather
-    // than having to individually change instances of widgets.
-    return Scaffold(
-      appBar: AppBar(
-        // TRY THIS: Try changing the color here to a specific color (to
-        // Colors.amber, perhaps?) and trigger a hot reload to see the AppBar
-        // change color while the other colors stay the same.
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-        // Here we take the value from the MyHomePage object that was created by
-        // the App.build method, and use it to set our appbar title.
-        title: Text(widget.title),
-      ),
-      body: Center(
-        // Center is a layout widget. It takes a single child and positions it
-        // in the middle of the parent.
+  Future<void> _generateLlmAnswer() async {
+    setState(() {
+      _llmLoading = true;
+      _error = null;
+      _llmAnswer = null;
+      _llmSourceUrl = null;
+    });
+    try {
+      final response = await http.post(
+        Uri.parse('http://127.0.0.1:8001/ask_llm'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'question': _controller.text}),
+      );
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        setState(() {
+          _llmAnswer = data['answer'] ?? '';
+          _llmSourceUrl = data['source_url'] ?? '';
+        });
+      } else {
+        setState(() {
+          _error =
+              'LLM Error: \\${response.statusCode} \\${response.reasonPhrase}';
+        });
+      }
+    } catch (e) {
+      setState(() {
+        _error = 'LLM Error: $e';
+      });
+    } finally {
+      setState(() {
+        _llmLoading = false;
+      });
+    }
+  }
+
+  Widget _buildSourceChip(Map<String, dynamic> src) {
+    final tags = (src['tags'] as List?)?.join(', ') ?? '';
+    final score = src['score'] ?? 0;
+    final favs = src['favorite_count'] ?? 0;
+    final accepted = src['accepted_answer_id'] != null;
+    return Card(
+      margin: const EdgeInsets.symmetric(vertical: 8),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
         child: Column(
-          // Column is also a layout widget. It takes a list of children and
-          // arranges them vertically. By default, it sizes itself to fit its
-          // children horizontally, and tries to be as tall as its parent.
-          //
-          // Column has various properties to control how it sizes itself and
-          // how it positions its children. Here we use mainAxisAlignment to
-          // center the children vertically; the main axis here is the vertical
-          // axis because Columns are vertical (the cross axis would be
-          // horizontal).
-          //
-          // TRY THIS: Invoke "debug painting" (choose the "Toggle Debug Paint"
-          // action in the IDE, or press "p" in the console), to see the
-          // wireframe for each widget.
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: <Widget>[
-            const Text('You have pushed the button this many times:'),
-            Text(
-              '$_counter',
-              style: Theme.of(context).textTheme.headlineMedium,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (accepted)
+              Row(
+                children: [
+                  Icon(Icons.check_circle, color: Colors.green, size: 20),
+                  const SizedBox(width: 6),
+                  Text(
+                    'Accepted Answer',
+                    style: TextStyle(color: Colors.green),
+                  ),
+                ],
+              ),
+            SelectableText(
+              src['question'] ?? '',
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+            ),
+            const SizedBox(height: 8),
+            SelectableText(src['answer'] ?? ''),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              children: [
+                if (tags.isNotEmpty) Chip(label: Text('Tags: $tags')),
+                Chip(label: Text('Score: $score')),
+                Chip(label: Text('Favorites: $favs')),
+              ],
             ),
           ],
         ),
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _incrementCounter,
-        tooltip: 'Increment',
-        child: const Icon(Icons.add),
-      ), // This trailing comma makes auto-formatting nicer for build methods.
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Stack Overflow RAG Q&A'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            tooltip: 'Refresh',
+            onPressed: () {
+              setState(() {
+                _controller.clear();
+                _selectedSource = 'hf';
+                _loading = false;
+                _error = null;
+                _result = null;
+                _selectedSourceIndex = null;
+                _llmAnswer = null;
+                _llmSourceUrl = null;
+                _llmLoading = false;
+              });
+            },
+          ),
+        ],
+      ),
+      body: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Scrollbar(
+          thumbVisibility: true,
+          child: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                TextField(
+                  controller: _controller,
+                  decoration: const InputDecoration(
+                    labelText: 'Ask a programming question',
+                    border: OutlineInputBorder(),
+                  ),
+                  onSubmitted: (_) => _askQuestion(),
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    const Text('Data Source:'),
+                    const SizedBox(width: 12),
+                    DropdownButton<String>(
+                      value: _selectedSource,
+                      items: const [
+                        DropdownMenuItem(value: 'local', child: Text('Local')),
+                        DropdownMenuItem(
+                          value: 'hf',
+                          child: Text('Hugging Face'),
+                        ),
+                        DropdownMenuItem(
+                          value: 'llm',
+                          child: Text('LLM (future)'),
+                        ),
+                      ],
+                      onChanged: (v) =>
+                          setState(() => _selectedSource = v ?? 'hf'),
+                    ),
+                    const Spacer(),
+                    ElevatedButton(
+                      onPressed: _loading ? null : _askQuestion,
+                      child: _loading
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Text('Ask'),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 18),
+                if (_error != null)
+                  SelectableText(
+                    _error!,
+                    style: const TextStyle(color: Colors.red),
+                  ),
+                if (_result != null) ...[
+                  Text(
+                    'Answer:',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  const SizedBox(height: 8),
+                  SelectableText(
+                    _result!["answer"] ?? '',
+                    style: const TextStyle(fontSize: 16),
+                  ),
+                  const SizedBox(height: 16),
+                  ElevatedButton.icon(
+                    onPressed: _llmLoading ? null : _generateLlmAnswer,
+                    icon: const Icon(Icons.auto_awesome),
+                    label: _llmLoading
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Text('Generate LLM Answer'),
+                  ),
+                  if (_llmAnswer != null) ...[
+                    const SizedBox(height: 16),
+                    Text(
+                      'LLM Answer:',
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    const SizedBox(height: 8),
+                    SelectableText(
+                      _llmAnswer ?? '',
+                      style: const TextStyle(fontSize: 16),
+                    ),
+                    if (_llmSourceUrl != null && _llmSourceUrl!.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 4.0),
+                        child: InkWell(
+                          onTap: () => launchUrl(Uri.parse(_llmSourceUrl!)),
+                          child: Text(
+                            _llmSourceUrl!,
+                            style: const TextStyle(
+                              color: Colors.blue,
+                              decoration: TextDecoration.underline,
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                  const SizedBox(height: 16),
+                  if ((_result!["sources"] as List).isNotEmpty)
+                    Text(
+                      'Sources:',
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                  if ((_result!["sources"] as List).isNotEmpty)
+                    SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: DataTable(
+                        columns: const [
+                          DataColumn(label: Text('Accepted')),
+                          DataColumn(label: Text('Question')),
+                          DataColumn(label: Text('Answer')),
+                          DataColumn(label: Text('Tags')),
+                          DataColumn(label: Text('Score')),
+                          DataColumn(label: Text('Favorites')),
+                        ],
+                        rows: (_result!["sources"] as List).asMap().entries.map(
+                          (entry) {
+                            final idx = entry.key;
+                            final s = entry.value as Map<String, dynamic>;
+                            final tags = (s['tags'] as List?)?.join(', ') ?? '';
+                            final accepted = s['accepted_answer_id'] != null;
+                            return DataRow(
+                              selected: _selectedSourceIndex == idx,
+                              onSelectChanged: (selected) {
+                                setState(() {
+                                  _selectedSourceIndex = selected! ? idx : null;
+                                });
+                              },
+                              cells: [
+                                DataCell(
+                                  accepted
+                                      ? const Icon(
+                                          Icons.check_circle,
+                                          color: Colors.green,
+                                          size: 18,
+                                        )
+                                      : const SizedBox.shrink(),
+                                ),
+                                DataCell(SelectableText(s['question'] ?? '')),
+                                DataCell(SelectableText(s['answer'] ?? '')),
+                                DataCell(Text(tags)),
+                                DataCell(Text('${s['score'] ?? 0}')),
+                                DataCell(Text('${s['favorite_count'] ?? 0}')),
+                              ],
+                            );
+                          },
+                        ).toList(),
+                      ),
+                    ),
+                  if (_selectedSourceIndex != null)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 16.0),
+                      child: Card(
+                        elevation: 2,
+                        child: Padding(
+                          padding: const EdgeInsets.all(16.0),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Selected Source',
+                                style: Theme.of(context).textTheme.titleMedium,
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                'Question:',
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              SelectableText(
+                                ((_result!["sources"]
+                                            as List)[_selectedSourceIndex!]
+                                        as Map<String, dynamic>)['question'] ??
+                                    '',
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                'Answer:',
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              SelectableText(
+                                ((_result!["sources"]
+                                            as List)[_selectedSourceIndex!]
+                                        as Map<String, dynamic>)['answer'] ??
+                                    '',
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  const SizedBox(height: 8),
+                  SelectableText(
+                    'Tokens: \u001b[36m[0m${_result!["tokens"] ?? 0}',
+                  ),
+                  SelectableText('Status: ${_result!["status"] ?? ""}'),
+                ],
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
